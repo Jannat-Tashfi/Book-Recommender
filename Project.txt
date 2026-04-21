@@ -1,0 +1,299 @@
+from tkinter import *
+from tkinter import messagebox
+import os
+import sys
+import traceback
+from PIL import Image, ImageTk
+import fitz  # PyMuPDF
+
+# -------------------------
+# SAFE BASE PATH (PY + EXE)
+# -------------------------
+if getattr(sys, "frozen", False):
+    BASE_DIR = sys._MEIPASS
+else:
+    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+PDF_FOLDER = os.path.join(BASE_DIR, "pdfs")
+IMG_DIR = os.path.join(BASE_DIR, "images")
+COVER_DIR = os.path.join(IMG_DIR, "covers")
+
+# -------------------------
+# SAFE IMAGE LOADER
+# -------------------------
+def load_image(path, size=None):
+    try:
+        if not os.path.exists(path):
+            return None
+        img = Image.open(path)
+        if size:
+            img = img.resize(size, Image.LANCZOS)
+        return ImageTk.PhotoImage(img)
+    except:
+        return None
+
+# -------------------------
+# BOOK DATA
+# -------------------------
+books = {
+    "Agatha Christie": [
+        "Murder On The Orient Express.pdf",
+        "ABC Murders.pdf",
+        "Seven Dials Mystery.pdf",
+        "Crooked House.pdf",
+        "Death ON The Nile.pdf"
+    ],
+    "Fyodor Dostoyevsky": [
+        "Crime and Punishment.pdf",
+        "Demons.pdf",
+        "Brothers Karamazov.pdf",
+        "White Nights.pdf",
+        "Notes From The Underground.pdf"
+    ],
+    "Dan Brown": [
+        "The Da Vinci Code.pdf",
+        "Angels and Demons.pdf",
+        "Inferno.pdf",
+        "Origin.pdf",
+        "The Lost Symbol.pdf"
+    ],
+    "Humayun Ahmed": [
+        "Badshah Namdar.pdf",
+        "Opekkha.pdf",
+        "Achinpur.pdf",
+        "Debi.pdf",
+        "Nandito Noroke.pdf"
+    ],
+    "William Shakespeare": [
+        "Macbeth.pdf",
+        "Romeo and Juliet.pdf",
+        "Hamlet.pdf",
+        "King Lear.pdf",
+        "The Tempest.pdf"
+    ]
+}
+
+# -------------------------
+# MAIN APP
+# -------------------------
+try:
+    root = Tk()
+    root.title("Book Recommender")
+    root.geometry("1250x700+200+100")
+    root.configure(bg="black")
+
+    # -------------------------
+    # BACKGROUND
+    # -------------------------
+    bg = load_image(os.path.join(IMG_DIR, "Book.jpg"), (1290, 700))
+    if bg:
+        Label(root, image=bg, bg="#87837A").place(x=0, y=0, relwidth=1, relheight=1)
+
+    # -------------------------
+    # LOGO
+    # -------------------------
+    logo = load_image(os.path.join(IMG_DIR, "book.png"), (80, 70))
+    if logo:
+        Label(root, image=logo, bg="#D0D0D0").place(x=550, y=80)
+
+    # -------------------------
+    # SEARCH ICON
+    # -------------------------
+    icon = load_image(os.path.join(IMG_DIR, "seo.png"), (25, 25))
+    if icon:
+        Label(root, image=icon, bg="#D0D0D0").place(x=600, y=170)
+
+    # -------------------------
+    # TITLE
+    # -------------------------
+    Label(root, text="Book Recommendation",
+          font=("Times New Roman", 32),
+          fg="black", bg="#D0D0D0").place(x=650, y=90)
+
+    # -------------------------
+    # SEARCH BOX
+    # -------------------------
+    Search = StringVar()
+    search_entry = Entry(root, textvariable=Search,
+                         font=("Times New Roman", 17),
+                         bg="black", fg="white", width=30)
+    search_entry.place(x=650, y=171)
+
+    # -------------------------
+    # BOOK FRAMES
+    # -------------------------
+    frames, labels, covers = [], [], []
+
+    for x in [300, 500, 700, 900, 1100]:
+        f = Frame(root, width=142, height=240, bg="black")
+        f.place(x=x, y=350)
+
+        img_lbl = Label(f, bg="black", cursor="hand2")
+        img_lbl.place(x=10, y=10)
+
+        txt_lbl = Label(f, text="", font=("Arial", 8),
+                        fg="pink", bg="black",
+                        wraplength=140, cursor="hand2")
+        txt_lbl.place(x=10, y=180)
+
+        frames.append(f)
+        covers.append(img_lbl)
+        labels.append(txt_lbl)
+
+    # -------------------------
+    # SCROLLABLE PDF VIEWER
+    # -------------------------
+    def open_pdf(name):
+        try:
+            path = os.path.join(PDF_FOLDER, name)
+
+            if not os.path.exists(path):
+                messagebox.showerror("Not Found", path)
+                return
+
+            viewer = Toplevel(root)
+            viewer.title(name)
+            viewer.geometry("900x700")
+            viewer.configure(bg="black")
+
+            doc = fitz.open(path)
+            total_pages = len(doc)
+            current_page = 0
+
+            canvas = Label(viewer, bg="black")
+            canvas.pack(expand=True)
+
+            info = Label(viewer, fg="white", bg="black")
+            info.pack()
+
+            zoom = 1.0
+            MIN_ZOOM = 0.6
+            MAX_ZOOM = 2.5
+
+            img_cache = {}
+
+            def render(page_num):
+                nonlocal zoom
+
+                key = (page_num, round(zoom, 1))
+
+                if key in img_cache:
+                    photo = img_cache[key]
+                else:
+                    page = doc[page_num]
+
+                    mat = fitz.Matrix(zoom, zoom)
+                    pix = page.get_pixmap(matrix=mat)
+
+                    img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+                    photo = ImageTk.PhotoImage(img)
+
+                    img_cache[key] = photo
+
+                canvas.config(image=photo)
+                canvas.image = photo
+                info.config(text=f"Page {page_num + 1}/{total_pages} | Zoom {int(zoom * 100)}%")
+
+            def next_page(event=None):
+                nonlocal current_page
+                if current_page < total_pages - 1:
+                    current_page += 1
+                    render(current_page)
+
+            def prev_page(event=None):
+                nonlocal current_page
+                if current_page > 0:
+                    current_page -= 1
+                    render(current_page)
+
+            def on_scroll(event):
+                nonlocal zoom
+
+                # detect CTRL manually
+                if event.state & 0x0004:  # Ctrl key pressed
+                    if event.delta > 0:
+                        zoom = min(MAX_ZOOM, zoom + 0.2)
+                    else:
+                        zoom = max(MIN_ZOOM, zoom - 0.2)
+                    render(current_page)
+                else:
+                    if event.delta < 0:
+                        next_page()
+                    else:
+                        prev_page()
+
+            # bindings
+            viewer.bind("<MouseWheel>", on_scroll)
+            viewer.bind("<Left>", prev_page)
+            viewer.bind("<Right>", next_page)
+
+            # keyboard zoom (backup controls)
+            viewer.bind("+", lambda e: [setattr(sys.modules[__name__], 'zoom', zoom + 0.2), render(current_page)])
+            viewer.bind("-", lambda e: [setattr(sys.modules[__name__], 'zoom', zoom - 0.2), render(current_page)])
+
+            render(0)
+
+        except Exception:
+            traceback.print_exc()
+            messagebox.showerror("Error", "Failed to open PDF")
+    # -------------------------
+    # SEARCH FUNCTION
+    # -------------------------
+    def search():
+        name = Search.get().strip()
+
+        if name not in books:
+            messagebox.showwarning("Not Found", "Writer not found")
+            return
+
+        for i in range(5):
+            if i < len(books[name]):
+                book = books[name][i]
+
+                img_path = os.path.join(COVER_DIR, book.replace(".pdf", ".jpg"))
+                img = load_image(img_path, (120, 150))
+
+                if img:
+                    covers[i].config(image=img)
+                    covers[i].image = img
+                    covers[i].bind("<Button-1>", lambda e, b=book: open_pdf(b))
+                else:
+                    covers[i].config(image="")
+
+                labels[i].config(text=book)
+                labels[i].bind("<Button-1>", lambda e, b=book: open_pdf(b))
+            else:
+                labels[i].config(text="")
+                covers[i].config(image="")
+
+    # -------------------------
+    # UI BUTTONS
+    # -------------------------
+    Button(root, text="Search", bg="#D0D0D0",font=("Times New Roman", 11), fg="black", command=search).place(x=983, y=171)
+    Button(root, text="Leave", bg="#D0D0D0",font=("Times New Roman", 11), fg="black",command=root.destroy).place(x=1250, y=50)
+
+    # -------------------------
+    # RIGHT CLICK MENU
+    # -------------------------
+    menu = Menu(root, tearoff=0)
+
+    def set_writer(w):
+        Search.set(w)
+
+    for w in books.keys():
+        menu.add_command(label=w, command=lambda x=w: set_writer(x))
+
+    def show_menu(e):
+        menu.post(e.x_root, e.y_root)
+
+    search_entry.bind("<Button-3>", show_menu)
+
+    # -------------------------
+    # RUN
+    # -------------------------
+    root.mainloop()
+
+except Exception:
+    print("FATAL ERROR:")
+    traceback.print_exc()
+    input("Press Enter to exit...")
